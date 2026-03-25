@@ -4,31 +4,35 @@ from store.bm25_store import BM25Store
 
 
 class HybridRetriever:
-    def __init__(self, embedding_model: EmbeddingModel, vector_store: VectorStore, bm25_store: BM25Store):
+    def __init__(self, embedding_model: EmbeddingModel, vector_store: VectorStore | None = None, bm25_store: BM25Store | None = None):
         self.embedding_model = embedding_model
-        self.vector_store = vector_store
-        self.bm25_store = bm25_store
+        self.vector_store = vector_store or VectorStore(dimension=embedding_model.dimension)
+        self.bm25_store = bm25_store or BM25Store()
         self._all_transactions: list[dict] = []
 
     def get_all(self) -> list[dict]:
         return list(self._all_transactions)
 
-    def add_transaction(self, transaction: dict):
-        self._all_transactions.append(transaction)
-        text = "{} {} {} {} {}".format(
-            transaction["date"],
-            transaction["description"],
-            transaction["amount"],
-            transaction["direction"],
-            transaction.get("category") or "",
+    @staticmethod
+    def _build_text(txn: dict) -> str:
+        return "{} {} {} {} {}".format(
+            txn["date"],
+            txn["description"],
+            txn["amount"],
+            txn["direction"],
+            txn.get("category") or "",
         ).strip()
-        emb = self.embedding_model.embed([text])[0]
-        self.vector_store.add(emb, transaction)
-        self.bm25_store.add(text, transaction)
+
+    def add_transaction(self, transaction: dict):
+        self.add_transactions([transaction])
 
     def add_transactions(self, transactions: list[dict]):
-        for txn in transactions:
-            self.add_transaction(txn)
+        texts = [self._build_text(txn) for txn in transactions]
+        embeddings = self.embedding_model.embed(texts)
+        for i, txn in enumerate(transactions):
+            self._all_transactions.append(txn)
+            self.vector_store.add(embeddings[i], txn)
+            self.bm25_store.add(texts[i], txn)
 
     def search(self, query: str, top_k: int = 5) -> list[dict]:
         query_emb = self.embedding_model.embed_query(query)

@@ -1,4 +1,9 @@
+import re
 from rank_bm25 import BM25Okapi
+
+
+def _tokenize(text: str) -> list[str]:
+    return re.sub(r"[^a-z0-9 ]", " ", text.lower()).split()
 
 
 class BM25Store:
@@ -6,17 +11,23 @@ class BM25Store:
         self.corpus: list[list[str]] = []
         self.documents: list[dict] = []
         self._index: BM25Okapi | None = None
+        self._dirty: bool = False
 
     def add(self, text: str, metadata: dict):
-        tokens = text.lower().split()
-        self.corpus.append(tokens)
+        self.corpus.append(_tokenize(text))
         self.documents.append(metadata)
+        self._dirty = True
+
+    def _build(self):
         self._index = BM25Okapi(self.corpus)
+        self._dirty = False
 
     def search(self, query: str, top_k: int = 5) -> list[dict]:
-        if not self._index:
+        if not self.corpus:
             return []
-        tokens = query.lower().split()
+        if self._dirty:
+            self._build()
+        tokens = _tokenize(query)
         scores = self._index.get_scores(tokens)
         ranked = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)
         results = []
