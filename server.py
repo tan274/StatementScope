@@ -7,6 +7,7 @@ from mcp.server.fastmcp import FastMCP
 
 from config import EMBEDDING_MODEL
 from parsers.csv_parser import parse_csv
+from parsers.pdf_parser import parse_pdf
 from store.embeddings import EmbeddingModel
 from rag.retriever import HybridRetriever
 from rag.query_engine import retrieve_and_answer
@@ -29,15 +30,13 @@ def load_statement(file_path: str) -> str:
         return f"Error: File not found: {file_path}"
 
     ext = os.path.splitext(file_path)[1].lower()
-    if ext == ".pdf":
-        return "PDF support coming soon (Phase 3)."
-    elif ext != ".csv":
+    if ext not in (".csv", ".pdf"):
         return f"Error: Unsupported file type '{ext}'. Only .csv and .pdf are supported."
 
     if any(t["source_file"] == file_path for t in all_transactions):
         return f"Already loaded: {os.path.basename(file_path)}, skipping."
 
-    new_transactions = parse_csv(file_path)
+    new_transactions = parse_pdf(file_path) if ext == ".pdf" else parse_csv(file_path)
     if not new_transactions:
         return "No transactions found in file."
 
