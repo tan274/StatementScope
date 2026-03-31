@@ -3,9 +3,10 @@ import os
 from datetime import datetime, timedelta
 from collections import defaultdict
 
+import anthropic
 from mcp.server.fastmcp import FastMCP
 
-from config import EMBEDDING_MODEL
+from config import ANTHROPIC_API_KEY, EMBEDDING_MODEL, MODEL
 from parsers.csv_parser import parse_csv
 from parsers.pdf_parser import parse_pdf
 from store.embeddings import EmbeddingModel
@@ -36,7 +37,10 @@ def load_statement(file_path: str) -> str:
     if any(t["source_file"] == file_path for t in all_transactions):
         return f"Already loaded: {os.path.basename(file_path)}, skipping."
 
-    new_transactions = parse_pdf(file_path) if ext == ".pdf" else parse_csv(file_path)
+    try:
+        new_transactions = parse_pdf(file_path) if ext == ".pdf" else parse_csv(file_path)
+    except Exception as e:
+        return f"Error parsing file: {e}"
     if not new_transactions:
         return "No transactions found in file."
 
@@ -66,6 +70,106 @@ def query_transactions(question: str) -> str:
         return "No statements loaded. Use load_statement to load a bank statement first."
 
     return retrieve_and_answer(retriever, question)
+
+
+@mcp.tool()
+def categorize_transactions() -> str:
+    """Automatically categorize all uncategorized transactions using AI.
+    Assigns categories: Food, Shopping, Transport, Bills, Entertainment,
+    Health, Travel, Income, Transfer, Other. Safe to call multiple times —
+    skips transactions that are already categorized."""
+    if not all_transactions:
+        return "No statements loaded. Use load_statement to load a bank statement first."
+
+    uncategorized = [t for t in all_transactions if t.get("category") is None]
+    if not uncategorized:
+        return "All transactions are already categorized."
+
+    CATEGORIZE_TOOL = {
+        "name": "categorize",
+        "description": "Assign a category to each transaction.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "categorizations": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id":       {"type": "string"},
+                            "category": {"type": "string", "enum": [
+                                "Food", "Shopping", "Transport", "Bills",
+                                "Entertainment", "Health", "Travel",
+                                "Income", "Transfer", "Other"
+                            ]},
+                        },
+                        "required": ["id", "category"],
+                    },
+                }
+            },
+            "required": ["categorizations"],
+        },
+    }
+
+    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    BATCH_SIZE = 100
+    total_categorized = 0
+
+    for i in range(0, len(uncategorized), BATCH_SIZE):
+        batch = uncategorized[i:i + BATCH_SIZE]
+        batch_text = "\n".join(
+            f"{t['id']} | {t['description']} | ${t['amount']:.2f} {t['direction']}"
+            for t in batch
+        )
+
+        try:
+            response = client.messages.create(
+                model=MODEL,
+                max_tokens=4096,
+                tools=[CATEGORIZE_TOOL],
+                tool_choice={"type": "tool", "name": "categorize"},
+                messages=[{
+                    "role": "user",
+                    "content": (
+                        "Categorize each transaction using ONLY these categories: "
+                        "Food, Shopping, Transport, Bills, Entertainment, Health, "
+                        "Travel, Income, Transfer, Other.\n\n"
+                        "Rules:\n"
+                        "- Food: restaurants, groceries, coffee, food delivery\n"
+                        "- Shopping: retail, Amazon, clothing, electronics\n"
+                        "- Transport: gas, Uber, Lyft, parking, transit\n"
+                        "- Bills: utilities, phone, internet, insurance, rent, mortgage\n"
+                        "- Entertainment: streaming, movies, music, games\n"
+                        "- Health: pharmacy, gym, medical\n"
+                        "- Travel: flights, hotels, Airbnb\n"
+                        "- Income: payroll, deposits, tax refunds, Zelle received\n"
+                        "- Transfer: transfers between own accounts\n"
+                        "- Other: anything that doesn't fit\n\n"
+                        f"Transactions:\n{batch_text}"
+                    ),
+                }],
+            )
+
+            for block in response.content:
+                if block.type == "tool_use":
+                    id_to_txn = {t["id"]: t for t in batch}
+                    for item in block.input["categorizations"]:
+                        if item["id"] in id_to_txn:
+                            id_to_txn[item["id"]]["category"] = item["category"]
+                            total_categorized += 1
+                    break
+
+        except Exception as e:
+            return f"Error during categorization (batch {i // BATCH_SIZE + 1}): {e}"
+
+    category_totals: dict[str, int] = defaultdict(int)
+    for t in all_transactions:
+        if t.get("category"):
+            category_totals[t["category"]] += 1
+
+    top_cats = sorted(category_totals.items(), key=lambda x: x[1], reverse=True)[:5]
+    top_str = ", ".join(f"{cat} ({n})" for cat, n in top_cats)
+    return f"Categorized {total_categorized} transactions. Top categories: {top_str}"
 
 
 @mcp.tool()
@@ -202,7 +306,7 @@ def _filter_by_period(transactions: list[dict], period: str) -> list[dict]:
         except ValueError:
             continue
 
-    return transactions
+    return []
 
 
 if __name__ == "__main__":

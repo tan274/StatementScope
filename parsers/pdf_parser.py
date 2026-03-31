@@ -40,7 +40,7 @@ def parse_pdf(file_path: str) -> list[dict]:
 
     response = client.messages.create(
         model=MODEL,
-        max_tokens=8192,
+        max_tokens=16384,
         tools=[EXTRACTION_TOOL],
         tool_choice={"type": "tool", "name": "extract_transactions"},
         messages=[{
@@ -67,6 +67,12 @@ def parse_pdf(file_path: str) -> list[dict]:
             ],
         }],
     )
+
+    if response.stop_reason == "max_tokens":
+        raise ValueError(
+            "PDF has too many transactions to extract in one pass. "
+            "Try splitting the statement into individual months."
+        )
 
     raw_transactions = []
     for block in response.content:
