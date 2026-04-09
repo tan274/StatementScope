@@ -1,6 +1,12 @@
+import hashlib
 import os
 import pandas as pd
 from datetime import datetime
+
+
+def _make_id(file_path: str, row_index: int) -> str:
+    path_hash = hashlib.md5(os.path.abspath(file_path).encode()).hexdigest()[:8]
+    return f"{path_hash}_{row_index:03d}"
 
 
 def _parse_date(date_str: str) -> str:
@@ -20,7 +26,7 @@ def _parse_chase(df: pd.DataFrame, source_file: str) -> list[dict]:
         direction = "credit" if raw_amount > 0 else "debit"
         category = str(row["Category"]).strip() if pd.notna(row["Category"]) else None
         transactions.append({
-            "id": f"{os.path.splitext(os.path.basename(source_file))[0]}_{i:03d}",
+            "id": _make_id(source_file, i),
             "date": _parse_date(row["Transaction Date"]),
             "description": str(row["Description"]).strip(),
             "amount": amount,
@@ -44,7 +50,7 @@ def _parse_bofa(df: pd.DataFrame, source_file: str) -> list[dict]:
         except (ValueError, TypeError):
             balance = None
         transactions.append({
-            "id": f"{os.path.splitext(os.path.basename(source_file))[0]}_{i:03d}",
+            "id": _make_id(source_file, i),
             "date": _parse_date(row["Date"]),
             "description": str(row["Description"]).strip(),
             "amount": amount,
@@ -77,7 +83,7 @@ def _parse_generic(df: pd.DataFrame, source_file: str) -> list[dict]:
         description = str(row[desc_col]).strip() if desc_col else "UNKNOWN"
         balance = float(row[balance_col]) if balance_col and pd.notna(row[balance_col]) else None
         transactions.append({
-            "id": f"{os.path.splitext(os.path.basename(source_file))[0]}_{i:03d}",
+            "id": _make_id(source_file, i),
             "date": _parse_date(row[date_col]),
             "description": description,
             "amount": amount,

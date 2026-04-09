@@ -23,8 +23,9 @@ retriever: HybridRetriever | None = None
 def load_statement(file_path: str) -> str:
     """Load a bank statement file (CSV or PDF) for analysis.
     Parses the file, extracts transactions, and indexes them for
-    querying. Supports Chase, Bank of America, Amex, and Wells Fargo
-    CSV exports. Provide the full absolute file path."""
+    querying. Supports Chase and Bank of America CSV exports; other
+    CSVs use a generic parser. PDF extraction and query answering
+    send data to the Anthropic API. Provide the full absolute file path."""
     global all_transactions, retriever
 
     if not os.path.exists(file_path):

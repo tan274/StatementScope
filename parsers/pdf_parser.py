@@ -3,7 +3,7 @@ import os
 
 import anthropic
 from config import ANTHROPIC_API_KEY, MODEL
-from parsers.csv_parser import _parse_date
+from parsers.csv_parser import _make_id, _parse_date
 
 client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
@@ -74,17 +74,22 @@ def parse_pdf(file_path: str) -> list[dict]:
             "Try splitting the statement into individual months."
         )
 
-    raw_transactions = []
+    raw_transactions = None
     for block in response.content:
         if block.type == "tool_use":
             raw_transactions = block.input["transactions"]
             break
 
-    basename = os.path.splitext(os.path.basename(file_path))[0]
+    if raw_transactions is None:
+        raise ValueError(
+            f"PDF extraction failed: Claude did not return structured data "
+            f"(stop_reason={response.stop_reason!r})."
+        )
+
     transactions = []
     for i, raw in enumerate(raw_transactions, start=1):
         transactions.append({
-            "id": f"{basename}_{i:03d}",
+            "id": _make_id(file_path, i),
             "date": _parse_date(raw["date"]),
             "description": str(raw["description"]).strip(),
             "amount": float(raw["amount"]),
