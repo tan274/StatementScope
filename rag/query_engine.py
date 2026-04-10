@@ -124,11 +124,14 @@ def _filter_by_period(transactions: list[dict], question: str) -> list[dict]:
         return [t for t in transactions if t.get("date", "") >= cutoff]
     match = _MONTH_NAMES.search(question)
     if match:
-        year_match = re.search(r"\b(20\d{2})\b", question)
-        year = int(year_match.group(1)) if year_match else datetime.now().year
         month_num = datetime.strptime(match.group(1), "%B").month
-        prefix = f"{year}-{month_num:02d}"
-        return [t for t in transactions if t.get("date", "").startswith(prefix)]
+        year_match = re.search(r"\b(20\d{2})\b", question)
+        if year_match:
+            prefix = f"{year_match.group(1)}-{month_num:02d}"
+            return [t for t in transactions if t.get("date", "").startswith(prefix)]
+        else:
+            month_str = f"-{month_num:02d}-"
+            return [t for t in transactions if month_str in t.get("date", "")]
     return transactions
 
 

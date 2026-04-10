@@ -28,6 +28,8 @@ def load_statement(file_path: str) -> str:
     send data to the Anthropic API. Provide the full absolute file path."""
     global all_transactions, retriever
 
+    file_path = os.path.abspath(file_path)
+
     if not os.path.exists(file_path):
         return f"Error: File not found: {file_path}"
 
@@ -167,6 +169,9 @@ def categorize_transactions() -> str:
     for t in all_transactions:
         if t.get("category"):
             category_totals[t["category"]] += 1
+
+    if retriever is not None:
+        retriever.rebuild()
 
     top_cats = sorted(category_totals.items(), key=lambda x: x[1], reverse=True)[:5]
     top_str = ", ".join(f"{cat} ({n})" for cat, n in top_cats)

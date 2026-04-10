@@ -72,26 +72,26 @@ What subscriptions am I paying for?
 | US Bank | — | ✅ |
 | Other | ⚠️ best-effort | ✅ |
 
-Chase and Bank of America have explicit CSV parsers. Other CSV formats fall back to a generic parser that infers columns by header name — it works for simple formats but may fail on non-standard exports. PDFs from any bank are parsed by Claude with no templates required.
+Chase and Bank of America have explicit CSV parsers. Other CSV formats fall back to a generic parser that infers columns by header name — it works for simple formats but may fail on non-standard exports.
 
 ---
 
 ## How It Works
 
 **Ingestion**
-Transactions are parsed from CSV or PDF into a normalized schema (`date`, `description`, `amount`, `direction`, `category`, `source_file`). PDFs are sent to Claude with `tool_choice` forced structured extraction — Claude must return a typed transaction array, no free-text parsing.
+Transactions are parsed from CSV or PDF into a consistent format with fields for date, description, amount, direction, category, and source file. For PDFs, Claude reads the document and returns a structured list of transactions.
 
 **Indexing**
-Each transaction description is embedded with `all-MiniLM-L6-v2` (SentenceTransformers) and stored in a FAISS flat index. The same transactions are also indexed in BM25. Both indexes are held in memory.
+Each transaction is turned into a searchable text string and embedded with `all-MiniLM-L6-v2` (SentenceTransformers) for semantic search in FAISS. The same text is also indexed in BM25 for keyword search.
 
 **Retrieval**
-Incoming queries are classified by Claude Haiku — a cheap binary call that decides whether the question needs all transactions or just the most relevant ones. For targeted queries, FAISS and BM25 are searched independently and their ranked results are fused with Reciprocal Rank Fusion (RRF). This covers cases where pure semantic search misses exact merchant names and pure keyword search misses semantic intent.
+When a question comes in, Claude Haiku first decides whether it needs all transactions or just the most relevant ones. For targeted questions, both the semantic index and keyword index are searched independently, and their results are combined using Reciprocal Rank Fusion (RRF). This covers cases where keyword search misses meaning ("gasoline" vs Shell/Chevron) and where semantic search misses exact names.
 
 **Answering**
-Retrieved transactions are formatted as a context block and passed to Claude with a strict system prompt. Common aggregate questions (totals, category breakdowns, top merchants, date-filtered sums) are intercepted before reaching Claude and computed locally when they match supported local handlers — no API call needed. Questions that require language understanding are sent to the model. Simple summaries are also available locally via `get_spending_summary(period)`.
+Common questions like totals, category breakdowns, top merchants, and date-filtered sums are answered locally when they match supported handlers — no API call needed. Questions that need language understanding are sent to Claude with the relevant transactions as context.
 
 **Categorization**
-Uncategorized transactions are batched in groups of 100 and sent to Claude with `tool_choice` forced output. Categories are written back in-place to the in-memory transaction list.
+Uncategorized transactions are sent to Claude in batches of 100, which assigns a category to each one. Categories are saved back to the transaction list and both indexes are rebuilt so category-based searches work right away.
 
 ---
 
@@ -113,7 +113,7 @@ Evaluated BM25-only, FAISS-only, and hybrid RRF on 10 labeled queries across 160
 | payroll direct deposit | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **Hit rate** | **90%** | **90%** | **90%** | **100%** | **100%** | **100%** | **100%** | **100%** | **100%** |
 
-On this dataset, dense retrieval was already strong. BM25 missed "gasoline" entirely — zero token overlap with Shell/Chevron/ARCO descriptions — while FAISS and hybrid found them semantically. Hybrid matches the strongest method on every query without regressions. BM25 remains useful for exact-token lookups, especially when merchant strings are abbreviated or irregular.
+BM25 missed "gasoline" entirely — the word doesn't appear in Shell/Chevron/ARCO descriptions — while FAISS and hybrid found them by meaning. Hybrid matched the strongest method on every query.
 
 Run the benchmark: `python eval_retrieval.py`
 
@@ -145,7 +145,7 @@ It does use the Anthropic API for PDF text extraction, query answering, and tran
 ## Current Limitations
 
 - **No persistence** — all loaded statements are in-memory and lost on server restart.
-- **Scale** — aggregate queries are computed locally, but semantic queries that need Claude still send retrieved transactions to the API. Not designed for very large histories.
+- **Scale** — not designed for very large transaction histories.
 
 ---
 

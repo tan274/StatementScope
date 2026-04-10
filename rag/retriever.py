@@ -34,6 +34,14 @@ class HybridRetriever:
             self.vector_store.add(embeddings[i], txn)
             self.bm25_store.add(texts[i], txn)
 
+    def rebuild(self):
+        """Re-index all transactions with current field values (e.g. after categorization)."""
+        transactions = list(self._all_transactions)
+        self.vector_store = VectorStore(dimension=self.embedding_model.dimension)
+        self.bm25_store = BM25Store()
+        self._all_transactions = []
+        self.add_transactions(transactions)
+
     def search(self, query: str, top_k: int = 5) -> list[dict]:
         query_emb = self.embedding_model.embed_query(query)
         vector_results = self.vector_store.search(query_emb, top_k=top_k)
