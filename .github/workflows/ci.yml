@@ -20,4 +20,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run parser tests (CSV only, no API calls)
-        run: pytest tests/test_parsers.py -k "CSV" -v
+        run: python -m pytest tests/test_parsers.py -k "CSV" -v
+
+      - name: Run persistence tests (no API calls)
+        run: python -m pytest tests/test_db.py -v

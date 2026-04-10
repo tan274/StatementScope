@@ -10,6 +10,7 @@ from config import ANTHROPIC_API_KEY, EMBEDDING_MODEL, MODEL
 from parsers.csv_parser import parse_csv
 from parsers.pdf_parser import parse_pdf
 from store.embeddings import EmbeddingModel
+from store.db import init_db, save_transactions, load_transactions, update_categories, clear_transactions
 from rag.retriever import HybridRetriever
 from rag.query_engine import retrieve_and_answer
 
@@ -17,6 +18,20 @@ mcp = FastMCP("statementscope")
 
 all_transactions: list[dict] = []
 retriever: HybridRetriever | None = None
+
+
+def _load_persisted():
+    global all_transactions, retriever
+    init_db()
+    persisted = load_transactions()
+    if persisted:
+        all_transactions.extend(persisted)
+        embedding_model = EmbeddingModel(EMBEDDING_MODEL)
+        retriever = HybridRetriever(embedding_model)
+        retriever.add_transactions(persisted)
+
+
+_load_persisted()
 
 
 @mcp.tool()
@@ -48,6 +63,7 @@ def load_statement(file_path: str) -> str:
         return "No transactions found in file."
 
     all_transactions.extend(new_transactions)
+    save_transactions(new_transactions)
 
     if retriever is None:
         embedding_model = EmbeddingModel(EMBEDDING_MODEL)
@@ -170,6 +186,8 @@ def categorize_transactions() -> str:
         if t.get("category"):
             category_totals[t["category"]] += 1
 
+    update_categories(all_transactions)
+
     if retriever is not None:
         retriever.rebuild()
 
@@ -225,6 +243,17 @@ def get_spending_summary(period: str = "all") -> str:
             lines.append(f"  {cat}: ${amount:.2f}")
 
     return "\n".join(lines)
+
+
+@mcp.tool()
+def clear_statements() -> str:
+    """Remove all loaded statements and reset to a clean state.
+    Clears all transactions from memory and the local database."""
+    global all_transactions, retriever
+    all_transactions.clear()
+    retriever = None
+    clear_transactions()
+    return "All statements cleared."
 
 
 @mcp.resource("statements://loaded")

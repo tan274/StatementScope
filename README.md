@@ -95,6 +95,9 @@ Common questions like totals, category breakdowns, top merchants, and date-filte
 **Categorization**
 Uncategorized transactions are sent to Claude in batches of 100, which assigns a category to each one. Categories are saved back to the transaction list and both indexes are rebuilt so category-based searches work right away.
 
+**Persistence**
+Loaded transactions are saved to a local SQLite database and restored automatically on server startup.
+
 ---
 
 ## Retrieval Benchmark
@@ -129,6 +132,7 @@ Run the benchmark: `python eval_retrieval.py`
 | `query_transactions(question)` | Semantic + keyword search over transactions |
 | `get_spending_summary(period)` | Local computation of totals and category breakdown |
 | `categorize_transactions()` | Batch AI categorization of uncategorized transactions |
+| `clear_statements()` | Remove all loaded statements and reset to a clean state |
 
 **Resources:** `statements://loaded` · `statements://summary`
 
@@ -146,7 +150,6 @@ It does use the Anthropic API for PDF text extraction, query answering, and tran
 
 ## Current Limitations
 
-- **No persistence** — all loaded statements are in-memory and lost on server restart.
 - **Scale** — not designed for very large transaction histories.
 
 ---

@@ -1,4 +1,5 @@
 .env
+statementscope.db
 __pycache__/
 *.pyc
 .venv/
