@@ -1,5 +1,7 @@
 # StatementScope
 
+![CI](https://github.com/tan274/StatementScope/actions/workflows/ci.yml/badge.svg)
+
 An MCP server that connects Claude to your local bank statements. Load a CSV or PDF, ask natural-language questions, and get answers backed by a hybrid retrieval pipeline.
 
 ---
